@@ -19,6 +19,7 @@ export interface MediaItem {
     reviewText: string;
     attachedImages: string[];
     createdAt: number;
+    previewUrl?: string | null;
 }
 
 // 双层热力图数据结构
@@ -136,8 +137,8 @@ export const getItemsByProvince = async (countryId: string, provinceId: string):
     return allItems.filter(item => item.provinceId === provinceId);
 };
 
-// 双层热力图聚合——同时统计国家总数和省份细分
-export const getHeatMapData = async (): Promise<HeatMapData> => {
+// 双层热力图聚合——同时统计国家总数和省份细分，支持按分类过滤
+export const getHeatMapData = async (category: 'all' | 'movie' | 'book' | 'music' = 'all'): Promise<HeatMapData> => {
     const db = await getDB();
     const allItems = await db.getAll('media_items');
 
@@ -145,6 +146,8 @@ export const getHeatMapData = async (): Promise<HeatMapData> => {
     const provinces: Record<string, number> = {};
 
     allItems.forEach(record => {
+        if (category !== 'all' && record.type !== category) return;
+
         // 1. 只要有 countryId，该国家总数 +1（自动汇总省份记录到国家）
         if (record.countryId) {
             countries[record.countryId] = (countries[record.countryId] || 0) + 1;

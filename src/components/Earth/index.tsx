@@ -12,7 +12,7 @@ const SUPPORTED_DRILLDOWN: string[] = [
 ];
 
 export default function Earth() {
-    const { theme, setActiveCountry, dataUpdateTrigger, activeCountry, viewState, setViewState, activeProvince, setActiveProvince } = useEarthStore();
+    const { theme, setActiveCountry, dataUpdateTrigger, activeCountry, viewState, setViewState, activeProvince, setActiveProvince, activeCategory } = useEarthStore();
     const [worldData, setWorldData] = useState<any>(null);
     const [countryData, setCountryData] = useState<any>(null);
     const [isSubRegionLoading, setIsSubRegionLoading] = useState(false);
@@ -138,10 +138,10 @@ export default function Earth() {
     }, [activeCountry, setViewState, setActiveCountry]);
 
     useEffect(() => {
-        getHeatMapData().then(data => {
+        getHeatMapData(activeCategory).then(data => {
             setHeatMap(data);
         });
-    }, [dataUpdateTrigger]);
+    }, [dataUpdateTrigger, activeCategory]);
 
     // 【关键】heatMap 变化时强制 Globe 重绘多边形颜色
     // react-globe.gl 内部对 polygonCapColor 做引用比较，仅 callback 换新引用才会触发
@@ -187,6 +187,71 @@ export default function Earth() {
             }
         }
     }, [showStartPage]);
+
+    // ---------- 增加地球无操作时缓慢自转效果 ----------
+    useEffect(() => {
+        let rafId: number;
+
+        // 因为 react-globe.gl 内置控制器(OrbitControls)在初始挂载时可能滞后
+        // 采用 requestAnimationFrame 轮询直到真实拿到控制器再开启，避免打开时静止呆板
+        const applyControls = () => {
+            if (globeRef.current) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const controls: any = globeRef.current.controls();
+                if (controls) {
+                    // 当处于世界全览模式时（!activeCountry）：开启自转
+                    // 当处于下钻/聚焦模式时（activeCountry 存在）：必须停止自转
+                    controls.autoRotate = !activeCountry;
+                    controls.autoRotateSpeed = 0.8; // 设置极缓慢的速度带来舒适的浸入感
+                    return; // 成功设置后退出轮询
+                }
+            }
+            rafId = requestAnimationFrame(applyControls);
+        };
+
+        rafId = requestAnimationFrame(applyControls);
+
+        return () => {
+            cancelAnimationFrame(rafId);
+        };
+    }, [activeCountry]);
+
+    // --------- 档案室点击远程跳转效果 ----------
+    // 当外部（如侧边栏、Dashboard）改变了 activeCountry，如果当前视角还没过去，执行自动飞行
+    useEffect(() => {
+        if (!activeCountry || !globeRef.current || !globeData) return;
+
+        // Find center of polygon roughly to fly to
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const targetFeature = globeData.features.find((f: any) =>
+            f.properties && (f.properties.ISO_A3 === activeCountry || f.properties.ADM0_A3 === activeCountry)
+        );
+
+        if (targetFeature && targetFeature.geometry && targetFeature.geometry.coordinates) {
+            // Simplified centroid extraction for basic camera focus
+            // Take the first coordinate of the first polygon ring
+            let coords = [0, 0];
+            const geomType = targetFeature.geometry.type;
+
+            if (geomType === 'Polygon') {
+                coords = targetFeature.geometry.coordinates[0][0];
+            } else if (geomType === 'MultiPolygon') {
+                coords = targetFeature.geometry.coordinates[0][0][0];
+            }
+
+            const [lng, lat] = coords;
+
+            if (lat !== undefined && lng !== undefined) {
+                globeRef.current.pointOfView({
+                    lat: lat,
+                    lng: lng,
+                    altitude: 1.5
+                }, 1500); // 1.5 second fly animation
+            }
+        }
+
+    }, [activeCountry, globeData]);
+
 
     // 热力色盘——根据记录数返回颜色（复古主题和水彩主题各一套）
     const getHeatColor = (count: number, isRetro: boolean): string => {
@@ -308,10 +373,12 @@ export default function Earth() {
                     // 3. 悬浮层（下钻后的省份，以及周围的其他国家）：稍微高出一丁点，防止 Z-fighting
                     return BASE_ALTITUDE + 0.001;
                 }}
+                rendererConfig={{ preserveDrawingBuffer: true }}
                 polygonCapColor={getPolygonColor}
                 // polygonCapMaterial 已移除——完全使用原生 polygonCapColor 渲染
                 polygonSideColor={() => 'rgba(0,0,0,0)'}
                 polygonStrokeColor={() => strokeColor}
+                polygonsTransitionDuration={1000}
                 onPolygonClick={handlePolygonClick}
             />
         </>

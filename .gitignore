@@ -31,3 +31,5 @@ world-geojson/
 public/geo/
 public/geo_simplified/
 *.geojson
+
+.vercel

@@ -2,10 +2,11 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useEarthStore } from '../../store';
 import { getItemsByCountry, getItemsByProvince, addMediaItem, deleteMediaItem, updateMediaItem } from '../../services/db';
 import type { MediaItem } from '../../services/db';
-import { X, Plus, Star, Search, Paperclip, Loader2, Trash2, Edit2 } from 'lucide-react';
+import { X, Plus, Star, Search, Paperclip, Loader2, Trash2, Edit2, Play, Pause, ChevronLeft, ChevronRight } from 'lucide-react';
 import { searchTmdb } from '../../services/tmdb';
 import { searchBooks } from '../../services/books';
 import { searchMusic } from '../../services/music';
+import PostcardGenerator from '../PostcardGenerator';
 
 // 极简单色 SVG 图标组件，替代 Emoji 以保持复古高级感
 function FilmIcon({ size = 16 }: { size?: number }) {
@@ -51,10 +52,14 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
 };
 
 export default function SidePanel() {
-    const { activeCountry, setActiveCountry, activeProvince, setActiveProvince, triggerDataUpdate } = useEarthStore();
+    const { activeCountry, setActiveCountry, activeProvince, setActiveProvince, triggerDataUpdate, setConfirmModal } = useEarthStore();
     const [items, setItems] = useState<MediaItem[]>([]);
     const [view, setView] = useState<'list' | 'add' | 'edit'>('list');
     const [editingRecord, setEditingRecord] = useState<MediaItem | null>(null);
+
+    // 明信片状态
+    const [printItem, setPrintItem] = useState<MediaItem | null>(null);
+    const [earthSnapshot, setEarthSnapshot] = useState<string>('');
 
     // 显示标题：省份模式显示省份名，国家模式显示国家码
     const displayTitle = activeProvince || activeCountry;
@@ -118,10 +123,24 @@ export default function SidePanel() {
                                         setView('edit');
                                     }}
                                     onDelete={async () => {
-                                        if (window.confirm('确定要销毁这份记忆档案吗？')) {
-                                            await deleteMediaItem(item.id);
-                                            await loadData();
-                                            triggerDataUpdate(); // 刷新高亮/热力图
+                                        setConfirmModal({
+                                            isOpen: true,
+                                            title: '销毁档案确认',
+                                            message: '这份载有记忆的档案一旦销毁将无法找回。你确定要执行此操作吗？',
+                                            onConfirm: async () => {
+                                                await deleteMediaItem(item.id);
+                                                await loadData();
+                                                triggerDataUpdate(); // 刷新高亮/热力图
+                                            }
+                                        });
+                                    }}
+                                    onPrint={() => {
+                                        // 截取地球 Canvas
+                                        const canvas = document.querySelector('canvas');
+                                        if (canvas) {
+                                            const dataUrl = canvas.toDataURL('image/png');
+                                            setEarthSnapshot(dataUrl);
+                                            setPrintItem(item);
                                         }
                                     }}
                                 />
@@ -155,6 +174,18 @@ export default function SidePanel() {
                     </div>
                 )}
             </div>
+
+            {/* 明信片生成器容器 (Visually Hidden but mounts to DOM) */}
+            {printItem && earthSnapshot && (
+                <PostcardGenerator
+                    item={printItem}
+                    earthImage={earthSnapshot}
+                    onComplete={() => {
+                        setPrintItem(null);
+                        setEarthSnapshot('');
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -166,6 +197,7 @@ function AddForm({ countryId, provinceId, editingRecord, onSaved, onCancel }: { 
     const [rating, setRating] = useState(editingRecord?.rating || 5);
     const [coverImage, setCoverImage] = useState<string | null>(editingRecord?.coverImage || null);
     const [creator, setCreator] = useState(editingRecord?.creator || '');  // 作者/导演/艺术家
+    const [previewUrl, setPreviewUrl] = useState<string | null>(editingRecord?.previewUrl || null);
     const [attachedImages, setAttachedImages] = useState<string[]>(editingRecord?.attachedImages || []);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
@@ -179,6 +211,7 @@ function AddForm({ countryId, provinceId, editingRecord, onSaved, onCancel }: { 
         year: string;
         badge: string;          // 下拉标签（FILM / TV / BOOK / ALBUM）
         subtitle?: string;      // 原名或额外信息
+        previewUrl?: string | null;
     }
     const [results, setResults] = useState<UnifiedResult[]>([]);
 
@@ -222,6 +255,7 @@ function AddForm({ countryId, provinceId, editingRecord, onSaved, onCancel }: { 
                     coverUrl: r.coverUrl,
                     year: r.releaseYear,
                     badge: 'ALBUM',
+                    previewUrl: r.previewUrl,
                 }));
             }
 
@@ -238,6 +272,7 @@ function AddForm({ countryId, provinceId, editingRecord, onSaved, onCancel }: { 
         setTitle(r.title);
         if (r.coverUrl) setCoverImage(r.coverUrl);
         if (r.creator) setCreator(r.creator);
+        if (r.previewUrl !== undefined) setPreviewUrl(r.previewUrl);
         setShowSuggestions(false);
         setResults([]);
     };
@@ -297,6 +332,7 @@ function AddForm({ countryId, provinceId, editingRecord, onSaved, onCancel }: { 
                 rating,
                 reviewText: review,
                 attachedImages,
+                previewUrl,
             });
         } else {
             await addMediaItem({
@@ -310,6 +346,7 @@ function AddForm({ countryId, provinceId, editingRecord, onSaved, onCancel }: { 
                 rating,
                 reviewText: review,
                 attachedImages,
+                previewUrl,
                 createdAt: Date.now()
             });
         }
@@ -436,7 +473,7 @@ function AddForm({ countryId, provinceId, editingRecord, onSaved, onCancel }: { 
                         {(['movie', 'book', 'music'] as const).map(t => (
                             <label
                                 key={t}
-                                className={`flex items-center gap-1.5 cursor-pointer px-2 py-1 border-[2px] ${type === t ? 'border-[#5c4033] bg-[#5c4033] text-[#f4ecd8]' : 'border-transparent text-[#5c4033] hover:border-[#5c4033]'}`}
+                                className={`flex items-center gap-1.5 cursor-pointer px-2 py-1 border-[2px] ${type === t ? 'border-[#5c4033] bg-[#5c4033] text-[#f4ecd8]' : 'border-transparent text-[#5c4033] hover:border-[#5c4033]'} `}
                                 onClick={() => handleTypeChange(t)}
                             >
                                 <input type="radio" checked={type === t} onChange={() => handleTypeChange(t)} className="hidden" />
@@ -490,7 +527,7 @@ function AddForm({ countryId, provinceId, editingRecord, onSaved, onCancel }: { 
                     <div className="flex gap-2 mt-3 flex-wrap">
                         {attachedImages.map((img, idx) => (
                             <div key={idx} className="relative w-14 h-14 border-[2px] border-[#5c4033] overflow-hidden group">
-                                <img src={img} className="w-full h-full object-cover" alt={`附图${idx + 1}`} />
+                                <img src={img} className="w-full h-full object-cover" alt={`附图${idx + 1} `} />
                                 <button
                                     type="button"
                                     onClick={() => setAttachedImages(prev => prev.filter((_, i) => i !== idx))}
@@ -524,37 +561,146 @@ function AddForm({ countryId, provinceId, editingRecord, onSaved, onCancel }: { 
     );
 }
 
-function MediaCard({ item, onEdit, onDelete }: { item: MediaItem, onEdit: () => void, onDelete: () => void }) {
+function MediaCard({ item, onEdit, onDelete, onPrint }: { item: MediaItem, onEdit: () => void, onDelete: () => void, onPrint: () => void }) {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+    const galleryItems = [item.coverImage, ...(item.attachedImages || [])].filter(Boolean) as string[];
+
+    useEffect(() => {
+        if (item.type === 'music' && item.previewUrl) {
+            audioRef.current = new Audio(item.previewUrl);
+            audioRef.current.onended = () => setIsPlaying(false);
+        }
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.src = '';
+                audioRef.current = null;
+            }
+        };
+    }, [item]);
+
+    const togglePlay = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!audioRef.current) return;
+        if (isPlaying) {
+            audioRef.current.pause();
+        } else {
+            // Check if there are other audios playing? We don't have a global player manager,
+            // but for a simple preview, HTML5 handles it relatively okay though overlaps can happen.
+            audioRef.current.play().catch(() => { });
+        }
+        setIsPlaying(!isPlaying);
+    };
+
     return (
         <div className="flex gap-4 p-3 border-[2px] border-[#5c4033] bg-[#f4ecd8] group relative" style={{ boxShadow: '3px 3px 0 #5c4033' }}>
             {/* 角落浮动操作按钮 */}
-            <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={onEdit} className="p-1 text-[#5c4033] opacity-40 hover:opacity-100 hover:bg-[#5c4033] hover:text-[#f4ecd8] border-[2px] border-transparent hover:border-[#5c4033]">
+            <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <button onClick={onPrint} title="冲印明信片" className="p-1 text-[#5c4033] bg-[#f4ecd8] border-[2px] border-[#5c4033] hover:bg-[#5c4033] hover:text-[#f4ecd8] shadow-[2px_2px_0_#5c4033] mr-2 font-mono text-xs flex items-center gap-1 font-bold">
+                    [PRINT]
+                </button>
+                <button onClick={onEdit} className="p-1 text-[#5c4033] bg-[#f4ecd8] border-[2px] border-transparent hover:border-[#5c4033] hover:bg-[#5c4033] hover:text-[#f4ecd8]">
                     <Edit2 size={14} />
                 </button>
-                <button onClick={onDelete} className="p-1 text-[#5c4033] opacity-40 hover:opacity-100 hover:bg-[#5c4033] hover:text-[#f4ecd8] border-[2px] border-transparent hover:border-[#5c4033]">
+                <button onClick={onDelete} className="p-1 text-[#5c4033] bg-[#f4ecd8] border-[2px] border-transparent hover:border-[#5c4033] hover:bg-[#5c4033] hover:text-[#f4ecd8]">
                     <Trash2 size={14} />
                 </button>
             </div>
-            <div className="w-16 h-20 border-[2px] border-[#5c4033] bg-[#f4ecd8] flex-shrink-0 flex items-center justify-center overflow-hidden">
+
+            <div
+                className={`w-16 h-20 border-[2px] border-[#5c4033] bg-[#f4ecd8] flex-shrink-0 flex items-center justify-center overflow-hidden relative cursor-pointer ${item.coverImage ? 'group/cover' : ''} ${isPlaying ? 'rounded-full spin-slow border-[#5c4033]/50' : ''}`}
+                onClick={() => {
+                    if (item.type === 'music' && item.previewUrl) {
+                        // 音乐如果有预览，点击封面改为播放控制
+                        togglePlay({ stopPropagation: () => { } } as React.MouseEvent);
+                    } else if (item.coverImage) {
+                        setLightboxIndex(0);
+                    }
+                }}
+            >
                 {item.coverImage ? (
-                    <img src={item.coverImage} className="w-full h-full object-cover grayscale opacity-90 group-hover:grayscale-0 group-hover:opacity-100" alt="cover" />
+                    <>
+                        <img src={item.coverImage} className={`w-full h-full object-cover grayscale opacity-90 transition-all ${isPlaying ? 'grayscale-0 opacity-100' : 'group-hover/cover:grayscale-0 group-hover/cover:opacity-100'}`} alt="cover" />
+                        {/* Audio preview layer for music */}
+                        {item.type === 'music' && item.previewUrl && (
+                            <div className={`absolute inset-0 bg-[#5c4033]/50 flex items-center justify-center transition-opacity ${isPlaying ? 'opacity-0 hover:opacity-100' : 'opacity-0 group-hover/cover:opacity-100'}`}>
+                                {isPlaying ? <Pause size={20} className="text-[#f4ecd8]" /> : <Play size={20} className="text-[#f4ecd8]" />}
+                            </div>
+                        )}
+                    </>
                 ) : (
-                    <div className="text-[#5c4033]">{TYPE_ICONS[item.type] || <Plus size={16} />}</div>
+                    <div className="text-[#5c4033] relative">
+                        {TYPE_ICONS[item.type] || <Plus size={16} />}
+                        {item.type === 'music' && item.previewUrl && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                {isPlaying ? <Pause size={10} className="text-[#5c4033]" /> : <Play size={10} className="text-[#5c4033]" />}
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
-            <div className="flex flex-col gap-1 flex-1">
-                <h3 className="font-bold flex items-center gap-2">
-                    <span className="opacity-60">{TYPE_ICONS[item.type]}</span>
-                    {item.title}
+
+            <div className="flex flex-col gap-1 flex-1 min-w-0">
+                <h3 className="font-bold flex items-center gap-2 pr-12">
+                    <span className="opacity-60 flex-shrink-0">{TYPE_ICONS[item.type]}</span>
+                    <span className="truncate" title={item.title}>{item.title}</span>
                 </h3>
                 <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map(star => (
                         <Star key={star} size={12} fill={star <= item.rating ? 'currentColor' : 'none'} className={star <= item.rating ? 'text-[#5c4033]' : 'text-[#5c4033]/20'} />
                     ))}
                 </div>
-                <p className="text-xs text-[#5c4033]/80 line-clamp-2 mt-1 italic font-serif">{item.reviewText}</p>
+                <p className="text-xs text-[#5c4033]/80 line-clamp-3 mt-1 italic font-serif leading-relaxed mb-1">{item.reviewText}</p>
+
+                {/* 附件展示列表 */}
+                {item.attachedImages && item.attachedImages.length > 0 && (
+                    <div className="flex gap-2 mt-auto flex-wrap pt-1 border-t border-[#5c4033]/10">
+                        {item.attachedImages.map((img, idx) => (
+                            <img
+                                key={idx}
+                                src={img}
+                                onClick={(e) => { e.stopPropagation(); setLightboxIndex(item.coverImage ? idx + 1 : idx); }}
+                                className="w-8 h-8 object-cover border-[1px] border-[#5c4033] cursor-pointer hover:border-[2px] grayscale hover:grayscale-0 transition-all opacity-80 hover:opacity-100"
+                                alt="attachment thumbnail"
+                            />
+                        ))}
+                    </div>
+                )}
             </div>
+
+            {/* Lightbox Overlay */}
+            {lightboxIndex !== null && galleryItems.length > 0 && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#f4ecd8]/90 backdrop-blur-md" onClick={(e) => { e.stopPropagation(); setLightboxIndex(null); }}>
+                    <button onClick={(e) => { e.stopPropagation(); setLightboxIndex(null); }} className="absolute top-8 right-8 text-[#5c4033] bg-transparent border-[2px] border-[#5c4033] hover:bg-[#5c4033] hover:text-[#f4ecd8] p-2 transition-colors z-10" style={{ boxShadow: '4px 4px 0 #5c4033' }}>
+                        <X size={24} />
+                    </button>
+
+                    {galleryItems.length > 1 && (
+                        <button onClick={(e) => { e.stopPropagation(); setLightboxIndex(lightboxIndex === 0 ? galleryItems.length - 1 : lightboxIndex - 1); }} className="absolute left-8 top-1/2 -translate-y-1/2 text-[#5c4033] bg-[#f4ecd8] border-[2px] border-[#5c4033] hover:bg-[#5c4033] hover:text-[#f4ecd8] p-3 transition-colors z-10" style={{ boxShadow: '4px 4px 0 #5c4033' }}>
+                            <ChevronLeft size={32} />
+                        </button>
+                    )}
+
+                    <div className="max-w-[85vw] max-h-[85vh] relative" onClick={(e) => e.stopPropagation()}>
+                        <img src={galleryItems[lightboxIndex]} className="w-full h-full object-contain border-[4px] border-[#5c4033] bg-[#f4ecd8]" style={{ boxShadow: '12px 12px 0 #5c4033' }} alt="Gallery Full" />
+                    </div>
+
+                    {galleryItems.length > 1 && (
+                        <button onClick={(e) => { e.stopPropagation(); setLightboxIndex(lightboxIndex === galleryItems.length - 1 ? 0 : lightboxIndex + 1); }} className="absolute right-8 top-1/2 -translate-y-1/2 text-[#5c4033] bg-[#f4ecd8] border-[2px] border-[#5c4033] hover:bg-[#5c4033] hover:text-[#f4ecd8] p-3 transition-colors z-10" style={{ boxShadow: '4px 4px 0 #5c4033' }}>
+                            <ChevronRight size={32} />
+                        </button>
+                    )}
+
+                    {galleryItems.length > 1 && (
+                        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 font-mono text-[#5c4033] font-bold tracking-widest text-lg bg-[#f4ecd8] border-[2px] border-[#5c4033] px-4 py-2" style={{ boxShadow: '4px 4px 0 #5c4033' }}>
+                            [ {lightboxIndex + 1} / {galleryItems.length} ]
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

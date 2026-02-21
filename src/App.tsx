@@ -2,14 +2,17 @@
 import { useRef } from 'react';
 import Earth from './components/Earth';
 import { useEarthStore } from './store';
-import { Palette, Download, Upload, Globe as GlobeIcon } from 'lucide-react';
+import { Palette, Download, Upload, Globe as GlobeIcon, Film, Book, Music } from 'lucide-react';
 import SidePanel from './components/SidePanel';
 import StartPage from './components/StartPage';
 import Logo from './components/Logo';
+import ConfirmModal from './components/ConfirmModal';
+import Dashboard from './components/Dashboard';
 import { getAllMediaItems, importMediaItems } from './services/db';
+import { LayoutDashboard } from 'lucide-react';
 
 function App() {
-  const { theme, setTheme, sidebarOpen, viewState, setViewState, setActiveCountry, showStartPage, triggerDataUpdate } = useEarthStore();
+  const { theme, setTheme, sidebarOpen, viewState, setViewState, setActiveCountry, showStartPage, triggerDataUpdate, activeCategory, setActiveCategory, setConfirmModal, setDashboardOpen } = useEarthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const toggleTheme = () => {
@@ -48,27 +51,32 @@ function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!window.confirm('导入新档案将覆盖当前浏览器中的所有记录，是否继续？')) {
-      e.target.value = ''; // 清除选择
-      return;
-    }
-
     const reader = new FileReader();
     reader.onload = async (event) => {
-      try {
-        const content = event.target?.result as string;
-        const data = JSON.parse(content);
-        if (!Array.isArray(data)) throw new Error('无效的档案格式');
+      const performImport = async () => {
+        try {
+          const content = event.target?.result as string;
+          const data = JSON.parse(content);
+          if (!Array.isArray(data)) throw new Error('无效的档案格式');
 
-        await importMediaItems(data);
-        triggerDataUpdate(); // 核心：强制重算 Heatmap 并驱动 3D 地球重渲和侧边栏刷新
-        alert('档案恢复成功！');
-      } catch (err) {
-        console.error(err);
-        alert('档案解析失败或数据已损坏！');
-      } finally {
-        e.target.value = ''; // 无论成功失败，重置 input 状态允许再次导入
-      }
+          await importMediaItems(data);
+          triggerDataUpdate(); // 核心：强制重算 Heatmap 并驱动 3D 地球重渲和侧边栏刷新
+          alert('档案恢复成功！');
+        } catch (err) {
+          console.error(err);
+          alert('档案解析失败或数据已损坏！');
+        } finally {
+          if (fileInputRef.current) fileInputRef.current.value = ''; // 无论成功失败，重置 input 状态允许再次导入
+        }
+      };
+
+      setConfirmModal({
+        isOpen: true,
+        title: '档案导入警告',
+        message: '导入新档案将覆盖当前浏览器中的所有记录，确认要继续吗？',
+        onConfirm: performImport,
+        onCancel: () => { if (fileInputRef.current) fileInputRef.current.value = ''; }
+      });
     };
     reader.readAsText(file);
   };
@@ -98,6 +106,16 @@ function App() {
               TEARTH
             </h1>
           </div>
+
+          {/* 护照档案室开启按钮 */}
+          <button
+            onClick={() => setDashboardOpen(true)}
+            className="flex items-center gap-2 mt-2 px-4 py-2 border-[2px] border-[#5c4033] bg-[#5c4033] text-[#f4ecd8] hover:bg-[#f4ecd8] hover:text-[#5c4033] transition-colors font-mono font-bold tracking-widest text-sm w-fit"
+            style={{ boxShadow: '4px 4px 0 #5c4033' }}
+          >
+            <LayoutDashboard size={16} />
+            <span>[ 档案室总览 ]</span>
+          </button>
           <div className="flex gap-2">
             {viewState === 'country' && (
               <button
@@ -158,7 +176,36 @@ function App() {
         </div>
       )}
 
+      {/* 新增：纬度漫游 (分类热力图切换) 左下角控件 */}
+      {(!showStartPage) && (
+        <div className="absolute bottom-6 left-6 z-20 flex bg-[#f4ecd8] border-[2px] border-[#5c4033] shadow-[4px_4px_0_#5c4033] animate-fade-up">
+          {([
+            { id: 'all', icon: GlobeIcon, label: '全览' },
+            { id: 'movie', icon: Film, label: '视界' },
+            { id: 'book', icon: Book, label: '阅历' },
+            { id: 'music', icon: Music, label: '频率' },
+          ] as const).map(cat => {
+            const isActive = activeCategory === cat.id;
+            const Icon = cat.icon;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`flex flex-col items-center gap-1.5 px-4 py-3 font-bold border-r-[2px] border-[#5c4033]/20 last:border-r-0 transition-colors ${isActive ? 'bg-[#5c4033] text-[#f4ecd8]' : 'text-[#5c4033] hover:bg-[#5c4033]/10'
+                  }`}
+                title={cat.label}
+              >
+                <Icon size={18} />
+                <span className="text-[10px] tracking-widest leading-none block font-mono">{cat.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {sidebarOpen && <SidePanel />}
+      <ConfirmModal />
+      <Dashboard />
     </div>
   );
 }
