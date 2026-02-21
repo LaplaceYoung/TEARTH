@@ -1,0 +1,10 @@
+src/App.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/App.tsx(5,1): error TS6133: 'Theme' is declared but its value is never read.
+src/App.tsx(5,10): error TS1484: 'Theme' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/Earth/index.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/Earth/index.tsx(2,1): error TS6192: All imports in import declaration are unused.
+src/components/Earth/index.tsx(69,23): error TS6133: 'isHovered' is declared but its value is never read.
+src/components/SidePanel/index.tsx(3,29): error TS1484: 'MediaItem' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/SidePanel/index.tsx(7,65): error TS6133: 'theme' is declared but its value is never read.
+src/services/db.ts(1,18): error TS1484: 'DBSchema' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/services/db.ts(1,28): error TS1484: 'IDBPDatabase' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.

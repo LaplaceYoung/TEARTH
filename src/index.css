@@ -1,0 +1,223 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-color: #f4ecd8;
+    --text-color: #333333;
+    --border-color: #5c4033;
+    --heat-0: #f4ecd8;
+    --heat-1: #d2b48c;
+    --heat-2: #a0522d;
+    --heat-3: #800000;
+  }
+
+  /* Watercolor theme overrides */
+  .theme-watercolor {
+    --bg-color: #e0f7fa;
+    --text-color: #004d40;
+    --border-color: #afb42b;
+    --heat-0: #ffffff;
+    --heat-1: #fff59d;
+    --heat-2: #ffb74d;
+    --heat-3: #e64a19;
+  }
+
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: "Inter", system-ui, sans-serif;
+    transition: background-color 0.5s ease, color 0.5s ease;
+    overflow: hidden;
+    /* Since the 3D globe is the main view */
+    margin: 0;
+    padding: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: inherit;
+  }
+}
+
+/* Custom scrollbar for side panel */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+}
+
+.theme-watercolor ::-webkit-scrollbar-thumb {
+  background: rgba(0, 77, 64, 0.3);
+}
+
+.handwriting-title {
+  font-family: "Indie Flower", "Comic Sans MS", cursive;
+}
+
+/* =========== 启动页多重影视级过渡特效 =========== */
+
+/* 1. 非对称巡航 (Aggressive Camera Pan) */
+@keyframes archivePan {
+  0% {
+    transform: scale(1.2) translate(-2%, -5%);
+  }
+
+  50% {
+    transform: scale(1.1) translate(3%, 2%);
+  }
+
+  100% {
+    transform: scale(1.25) translate(-4%, 4%);
+  }
+}
+
+/* 2. 老式投影仪闪烁 (Projector Flicker) */
+@keyframes projectorFlicker {
+
+  0%,
+  100% {
+    opacity: 0.95;
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    opacity: 0.85;
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    opacity: 0.9;
+  }
+
+  25% {
+    opacity: 0.82;
+  }
+
+  75% {
+    opacity: 0.98;
+  }
+}
+
+/* 3. 扫描线垂直滚动 (Scanline Roll) */
+@keyframes scanlineRoll {
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 0 100vh;
+  }
+}
+
+/* --- 实际应用类 --- */
+
+/* 完全包裹并确保遮蔽区不泄漏 */
+.landing-container {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+/* 底层：实际运动的画卷 */
+.landing-bg-animated {
+  position: absolute;
+  top: -10%;
+  left: -10%;
+  right: -10%;
+  bottom: -10%;
+  /* 留足余量供大幅度位移 */
+  background-image: url('/start_bg.png');
+  background-size: cover;
+  background-position: center;
+  z-index: 1;
+  animation: archivePan 30s ease-in-out infinite alternate;
+}
+
+/* 中层：闪烁与暗角 (Vignette & Flicker) */
+.landing-vignette-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: radial-gradient(circle, transparent 40%, rgba(20, 15, 10, 0.8) 120%);
+  animation: projectorFlicker 4s infinite;
+}
+
+/* 表层：胶片噪点与物理扫描线混叠 */
+.landing-noise-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.15;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* 使用 ::before 向噪点层附加滚动的黑色极细扫描线 */
+.landing-noise-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.1));
+  background-size: 100% 4px;
+  animation: scanlineRoll 10s linear infinite;
+}
+
+/* =========== 地球仪主界面多重背景 =========== */
+
+/* 第一层（最底层）：复古制图网格 (Cartographic Grid) */
+.main-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(100, 70, 40, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 70, 40, 0.05) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 第二层（中间层）：羊皮纸质感/老地图纹理 (Parchment Texture) */
+.main-bg-texture {
+  position: absolute;
+  inset: 0;
+  background-image: url('/bg-texture.png');
+  background-size: cover;
+  opacity: 0.12;
+  /* 极低透明度，当做水印 */
+  mix-blend-mode: multiply;
+  /* 正片叠底更融于底色 */
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 第三层（最顶层）：四周暗角聚焦 (Vignette Effect) */
+.main-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 30%, rgba(40, 25, 15, 0.4) 120%);
+  pointer-events: none;
+  z-index: 2;
+  /* 必须在地球之下 */
+}
